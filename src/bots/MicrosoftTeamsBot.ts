@@ -3,7 +3,7 @@ import { JoinParams } from './AbstractMeetBot';
 import { BotStatus } from '../types';
 import config from '../config';
 import { RecordingUploadFailedError, WaitingAtLobbyRetryError } from '../error';
-import { handleWaitingAtLobbyError, MeetBotBase } from './MeetBotBase';
+import { handleWaitingAtLobbyError, MeetBotBase, registerCancel } from './MeetBotBase';
 import { globalJobStore } from '../lib/globalJobStore';
 import { v4 } from 'uuid';
 import { patchBotStatus } from '../services/botService';
@@ -161,6 +161,7 @@ export class MicrosoftTeamsBot extends MeetBotBase {
     this._logger.info('Launching browser for actual meeting...');
 
     this.page = await createBrowserContext(url, this._correlationId, 'microsoft');
+    registerCancel(this.page);
 
     this._logger.info('Navigating to Microsoft Teams Meeting URL...');
     await this.page.goto(url, { waitUntil: 'domcontentloaded' });

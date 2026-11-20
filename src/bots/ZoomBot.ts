@@ -11,7 +11,7 @@ import { getWaitingPromise } from '../lib/promise';
 import createBrowserContext from '../lib/chromium';
 import { uploadDebugImage } from '../services/bugService';
 import { Logger } from 'winston';
-import { handleWaitingAtLobbyError, registerInPageStop } from './MeetBotBase';
+import { handleWaitingAtLobbyError, registerCancel, registerInPageStop } from './MeetBotBase';
 import { ZOOM_REQUEST_DENIED } from '../constants';
 
 class BotBase extends AbstractMeetBot {
@@ -93,6 +93,7 @@ export class ZoomBot extends BotBase {
     this._logger.info('Launching browser for Zoom...', { userId: params.userId });
 
     this.page = await createBrowserContext(url, this._correlationId, 'zoom');
+    registerCancel(this.page);
 
     await this.page.route('**/*.exe', (route) => {
       this._logger.info(`Detected .exe download: ${route.request().url()?.split('download')[0]}`);

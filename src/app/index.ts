@@ -25,14 +25,24 @@ app.get('/isbusy', async (req, res) => {
   return res.status(200).json({ success: true, data: jobStoreBusy });
 });
 
-// Stop the current recording early; it is finalized and uploaded as if the
-// meeting had ended.
+// idle | joining (lobby, sign-in or bot-block pages included) | recording.
+// /isbusy stays as is: busy means joining or recording.
+app.get('/status', async (req, res) => {
+  return res.status(200).json({ success: true, data: globalJobStore.getState() });
+});
+
+// Recording: stop early and upload it as if the meeting had ended.
+// Joining: give up on the meeting at once.
 app.post('/stop', async (req, res) => {
   try {
+    const state = globalJobStore.getState();
     if (!(await globalJobStore.requestStop())) {
-      return res.status(409).json({ success: false, error: 'Nothing is recording right now.' });
+      return res.status(409).json({ success: false, error: 'The bot is idle.' });
     }
-    return res.status(202).json({ success: true, message: 'Stopping; the recording will be uploaded.' });
+    const message = state === 'recording'
+      ? 'Stopping; the recording will be uploaded.'
+      : 'Join cancelled.';
+    return res.status(202).json({ success: true, message });
   } catch (error) {
     return res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
   }
@@ -53,6 +63,11 @@ const busyStatus = new client.Gauge({
   help: 'busy status of the pod (1 = busy, 0 = available)'
 });
 
+const isrecording = new client.Gauge({
+  name: 'isrecording',
+  help: 'recording status of the pod (1 = recording, 0 = idle or still joining)'
+});
+
 const isavailable = new client.Gauge({
   name: 'isavailable',
   help: 'available status of the pod (1 = available, 0 = busy)'
@@ -63,6 +78,7 @@ app.get('/metrics', async (req, res) => {
   const jobStoreBusy = globalJobStore.isBusy() ? 1 : 0;
   busyStatus.set(jobStoreBusy);
   isavailable.set(1 - jobStoreBusy);
+  isrecording.set(globalJobStore.getState() === 'recording' ? 1 : 0);
   res.set('Content-Type', client.register.contentType);
   res.end(await client.register.metrics());
 });

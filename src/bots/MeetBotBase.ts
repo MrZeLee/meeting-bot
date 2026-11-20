@@ -6,6 +6,7 @@ import { Logger } from 'winston';
 import { LogSubCategory, UnsupportedMeetingCategory, WaitingAtLobbyCategory } from '../types';
 import { GOOGLE_REQUEST_DENIED, MICROSOFT_REQUEST_DENIED, ZOOM_REQUEST_DENIED } from '../constants';
 import { globalJobStore } from '../lib/globalJobStore';
+import { isExternalBrowserContext } from '../lib/chromium';
 
 export class MeetBotBase extends AbstractMeetBot {
   protected page: Page;
@@ -14,6 +15,21 @@ export class MeetBotBase extends AbstractMeetBot {
     throw new Error('Function not implemented.');
   }
 }
+
+/**
+ * Let /stop abandon a join: close this bot's browser. Call right after the
+ * browser is created. The shared chrome-cdp sidecar stays up; only its tab closes.
+ */
+export const registerCancel = (page: Page): void => {
+  globalJobStore.setCancelHandler(async () => {
+    const context = page.context();
+    if (isExternalBrowserContext(context)) {
+      await page.close();
+    } else {
+      await context.browser()?.close();
+    }
+  });
+};
 
 /**
  * Let /stop end an in-page MediaRecorder recording (Zoom, Google Meet). Call

@@ -3,7 +3,7 @@ import { BotStatus, WaitPromise } from '../types';
 import config from '../config';
 import { RecordingUploadFailedError, UnsupportedMeetingError, WaitingAtLobbyRetryError } from '../error';
 import { patchBotStatus } from '../services/botService';
-import { handleUnsupportedMeetingError, handleWaitingAtLobbyError, MeetBotBase, registerInPageStop } from './MeetBotBase';
+import { handleUnsupportedMeetingError, handleWaitingAtLobbyError, MeetBotBase, registerCancel, registerInPageStop } from './MeetBotBase';
 import { v4 } from 'uuid';
 import { IUploader } from '../middleware/disk-uploader';
 import { Logger } from 'winston';
@@ -90,6 +90,7 @@ export class GoogleMeetBot extends MeetBotBase {
     this._logger.info('Launching browser...');
 
     this.page = await createBrowserContext(url, this._correlationId, 'google');
+    registerCancel(this.page);
 
     this._logger.info('Navigating to Google Meet URL...');
     await this.page.goto(url, { waitUntil: 'domcontentloaded' });

@@ -19,11 +19,23 @@ interface ActiveJob {
   path: string; // e.g. /zoom/join
   body: unknown; // the original join request
   resumes: number;
+  // Set once recording started. A join that never got that far (lobby, bot
+  // block) is not worth rejoining after a restart.
+  recording?: boolean;
 }
 
 export const saveActiveJob = (job: ActiveJob): void => {
   fs.mkdirSync(tempFolder, { recursive: true });
   fs.writeFileSync(activeJobFile, JSON.stringify(job));
+};
+
+export const markActiveJobRecording = (): void => {
+  try {
+    const job: ActiveJob = JSON.parse(fs.readFileSync(activeJobFile, 'utf8'));
+    saveActiveJob({ ...job, recording: true });
+  } catch {
+    // No saved job (e.g. a Redis-queued one): nothing to mark.
+  }
 };
 
 export const clearActiveJob = (): void => {
@@ -48,7 +60,9 @@ export const recoverAfterRestart = async (port: number, logger: Logger): Promise
     try {
       const job: ActiveJob = JSON.parse(fs.readFileSync(activeJobFile, 'utf8'));
       clearActiveJob();
-      if (job.resumes >= MAX_RESUMES) {
+      if (!job.recording) {
+        logger.info('Not rejoining: the interrupted meeting never started recording', { path: job.path });
+      } else if (job.resumes >= MAX_RESUMES) {
         logger.error('Not rejoining: the meeting already restarted the bot too often', { path: job.path, resumes: job.resumes });
       } else {
         logger.warn('Rejoining the meeting interrupted by a restart', { path: job.path, resumes: job.resumes + 1 });

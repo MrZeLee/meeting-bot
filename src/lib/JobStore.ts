@@ -1,7 +1,7 @@
 import { Logger } from 'winston';
 import { KnownError } from '../error';
 import { getErrorType } from '../util/logger';
-import { clearActiveJob } from './recovery';
+import { clearActiveJob, markActiveJobRecording } from './recovery';
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((r) => setTimeout(r, ms));
@@ -12,6 +12,11 @@ export class JobStore {
   // Set by the bot once it is recording; ends the recording the same way the
   // in-meeting detectors do, so it still uploads. Cleared when the job ends.
   private stopHandler: (() => Promise<void>) | null = null;
+  // Set by the bot once its browser exists; closes it so /stop can abandon a
+  // join (lobby, bot-blocked page) instead of waiting out JOIN_WAIT_TIME.
+  private cancelHandler: (() => Promise<void>) | null = null;
+  // Ends the current job at once (see addJob); null when idle.
+  private abortJob: (() => void) | null = null;
 
   async addJob<T>(
     task: () => Promise<T>, 
@@ -25,9 +30,23 @@ export class JobStore {
     }
 
     this.isRunning = true;
-    
+
+    // The bots' lobby loops swallow errors until their own timeout, so closing
+    // the browser alone would not end a cancelled join promptly: race the task
+    // against an abort instead. The abandoned task dies out against its closed
+    // browser, and job.cancelled stops it from retrying into a new one.
+    const job = { cancelled: false };
+    const aborted = new Promise<never>((_, reject) => {
+      this.abortJob = () => {
+        job.cancelled = true;
+        reject(new Error('Join cancelled by /stop'));
+      };
+    });
+    const run = this.executeTaskWithRetry(task, logger, retryCount, job);
+    run.catch(() => {}); // settled through the race below
+
     // Execute the task asynchronously without waiting for completion
-    this.executeTaskWithRetry(task, logger, retryCount).then(async () => {
+    Promise.race([run, aborted]).then(async () => {
       logger.info('LogBasedMetric Bot has finished recording meeting successfully.');
       if (onCompleted) {
         try {
@@ -54,6 +73,8 @@ export class JobStore {
     }).finally(() => {
       this.isRunning = false;
       this.stopHandler = null;
+      this.cancelHandler = null;
+      this.abortJob = null;
       // Finished, failed or stopped: nothing to rejoin after a restart.
       clearActiveJob();
     });
@@ -65,11 +86,14 @@ export class JobStore {
   private async executeTaskWithRetry<T>(
     task: () => Promise<T>,
     logger: Logger,
-    retryCount: number
+    retryCount: number,
+    job: { cancelled: boolean }
   ): Promise<void> {
     try {
       await task();
     } catch (error) {
+      if (job.cancelled) throw error;
+
       if (error instanceof KnownError && !error.retryable) {
         logger.error('KnownError is not retryable:', error.name, error.message);
         throw error;
@@ -82,11 +106,12 @@ export class JobStore {
 
       retryCount += 1;
       await sleep(retryCount * 30000);
+      if (job.cancelled) throw error;
       if (retryCount < 3) {
         if (retryCount) {
           logger.warn(`Retry count: ${retryCount}`);
         }
-        await this.executeTaskWithRetry(task, logger, retryCount);
+        await this.executeTaskWithRetry(task, logger, retryCount, job);
       } else {
         throw error;
       }
@@ -97,17 +122,36 @@ export class JobStore {
     return this.isRunning;
   }
 
+  getState(): 'idle' | 'joining' | 'recording' {
+    if (!this.isRunning) return 'idle';
+    return this.stopHandler ? 'recording' : 'joining';
+  }
+
+  /** Called by the bot when recording starts. */
   setStopHandler(handler: () => Promise<void>): void {
     this.stopHandler = handler;
+    markActiveJobRecording();
+  }
+
+  /** Called by the bot once its browser exists. */
+  setCancelHandler(handler: () => Promise<void>): void {
+    this.cancelHandler = handler;
   }
 
   /**
-   * Ask the running bot to stop recording now and upload what it has.
-   * @returns false when nothing is recording yet (no job, or still joining)
+   * Recording: stop now and upload what was recorded. Joining (or waiting to
+   * retry): give up on this meeting at once.
+   * @returns false when idle
    */
   async requestStop(): Promise<boolean> {
-    if (!this.isRunning || !this.stopHandler) return false;
-    await this.stopHandler();
+    if (!this.isRunning) return false;
+    if (this.stopHandler) {
+      await this.stopHandler();
+      return true;
+    }
+    const cancel = this.cancelHandler;
+    this.abortJob?.();
+    await cancel?.().catch(() => {});
     return true;
   }
 
