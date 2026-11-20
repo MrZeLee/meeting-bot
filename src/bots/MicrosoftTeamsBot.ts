@@ -4,6 +4,7 @@ import { BotStatus } from '../types';
 import config from '../config';
 import { RecordingUploadFailedError, WaitingAtLobbyRetryError } from '../error';
 import { handleWaitingAtLobbyError, MeetBotBase } from './MeetBotBase';
+import { globalJobStore } from '../lib/globalJobStore';
 import { v4 } from 'uuid';
 import { patchBotStatus } from '../services/botService';
 import { IUploader } from '../middleware/disk-uploader';
@@ -422,6 +423,11 @@ export class MicrosoftTeamsBot extends MeetBotBase {
     // Hoisted out of the try block so the matching finally can set it to signal
     // the silence detector (declared inside the try) to stop on its next tick.
     let meetingEnded = false;
+    // /stop: the wait loop below sees this within a second, then stops ffmpeg
+    // and stages the file for upload like any other meeting end.
+    globalJobStore.setStopHandler(async () => {
+      meetingEnded = true;
+    });
 
     try {
       await recorder.start();

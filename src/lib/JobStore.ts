@@ -8,6 +8,9 @@ const sleep = (ms: number): Promise<void> =>
 export class JobStore {
   private isRunning: boolean = false;
   private shutdownRequested: boolean = false;
+  // Set by the bot once it is recording; ends the recording the same way the
+  // in-meeting detectors do, so it still uploads. Cleared when the job ends.
+  private stopHandler: (() => Promise<void>) | null = null;
 
   async addJob<T>(
     task: () => Promise<T>, 
@@ -49,6 +52,7 @@ export class JobStore {
       }
     }).finally(() => {
       this.isRunning = false;
+      this.stopHandler = null;
     });
 
     logger.info('LogBasedMetric Bot job has been queued and started recording meeting.');
@@ -88,6 +92,20 @@ export class JobStore {
 
   isBusy(): boolean {
     return this.isRunning;
+  }
+
+  setStopHandler(handler: () => Promise<void>): void {
+    this.stopHandler = handler;
+  }
+
+  /**
+   * Ask the running bot to stop recording now and upload what it has.
+   * @returns false when nothing is recording yet (no job, or still joining)
+   */
+  async requestStop(): Promise<boolean> {
+    if (!this.isRunning || !this.stopHandler) return false;
+    await this.stopHandler();
+    return true;
   }
 
   /**

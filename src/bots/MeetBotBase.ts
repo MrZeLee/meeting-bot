@@ -5,6 +5,7 @@ import { addBotLog } from '../services/botService';
 import { Logger } from 'winston';
 import { LogSubCategory, UnsupportedMeetingCategory, WaitingAtLobbyCategory } from '../types';
 import { GOOGLE_REQUEST_DENIED, MICROSOFT_REQUEST_DENIED, ZOOM_REQUEST_DENIED } from '../constants';
+import { globalJobStore } from '../lib/globalJobStore';
 
 export class MeetBotBase extends AbstractMeetBot {
   protected page: Page;
@@ -13,6 +14,22 @@ export class MeetBotBase extends AbstractMeetBot {
     throw new Error('Function not implemented.');
   }
 }
+
+/**
+ * Let /stop end an in-page MediaRecorder recording (Zoom, Google Meet). Call
+ * after the recording script is injected: it sets window.__meetbotStop.
+ */
+export const registerInPageStop = (page: Page): void => {
+  globalJobStore.setStopHandler(async () => {
+    const found = await page.evaluate(() => {
+      const stop = (window as any).__meetbotStop;
+      // Not awaited: it ends by closing this browser, which would reject.
+      if (stop) void stop();
+      return !!stop;
+    });
+    if (!found) throw new Error('The recording has not started yet.');
+  });
+};
 
 export const handleWaitingAtLobbyError = async ({
   provider,

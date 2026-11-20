@@ -147,6 +147,9 @@ export class RecordingTask extends Task<null, void> {
             }
           };
 
+          // The /stop endpoint calls this (via the job store) to end the recording early.
+          (window as any).__meetbotStop = stopTheRecording;
+
           let loneTest: NodeJS.Timeout;
           let monitor = true;
           let hasSeenOtherParticipant = false;
@@ -182,6 +185,17 @@ export class RecordingTask extends Task<null, void> {
 
             loneTest = setInterval(() => {
               try {
+                // Removed by the host: Zoom shows "You have been removed" with an
+                // "Exit" button (not the "OK" handled below) and the participant
+                // count freezes, so neither check below would ever fire.
+                if ([dom, document].some((d) => d.body?.textContent?.includes('You have been removed'))) {
+                  console.log('Detected bot was removed from the Zoom meeting. End Recording...', { userId });
+                  clearInterval(loneTest);
+                  monitor = false;
+                  stopTheRecording();
+                  return;
+                }
+
                 // Detect and click blocking "OK" buttons
                 const okButton = Array.from(dom.querySelectorAll('button'))
                     .filter((el) => el?.innerText?.trim()?.match(/^OK/i));

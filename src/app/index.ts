@@ -24,6 +24,19 @@ app.get('/isbusy', async (req, res) => {
   return res.status(200).json({ success: true, data: jobStoreBusy });
 });
 
+// Stop the current recording early; it is finalized and uploaded as if the
+// meeting had ended.
+app.post('/stop', async (req, res) => {
+  try {
+    if (!(await globalJobStore.requestStop())) {
+      return res.status(409).json({ success: false, error: 'Nothing is recording right now.' });
+    }
+    return res.status(202).json({ success: true, message: 'Stopping; the recording will be uploaded.' });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
 app.get('/health', async (req, res) => {
   // Simple health check endpoint for Docker
   return res.status(200).json({ 

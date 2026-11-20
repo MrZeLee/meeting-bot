@@ -11,7 +11,7 @@ import { getWaitingPromise } from '../lib/promise';
 import createBrowserContext from '../lib/chromium';
 import { uploadDebugImage } from '../services/bugService';
 import { Logger } from 'winston';
-import { handleWaitingAtLobbyError } from './MeetBotBase';
+import { handleWaitingAtLobbyError, registerInPageStop } from './MeetBotBase';
 import { ZOOM_REQUEST_DENIED } from '../constants';
 
 class BotBase extends AbstractMeetBot {
@@ -516,6 +516,7 @@ export class ZoomBot extends BotBase {
       this._logger
     );
     await recordingTask.runAsync(null);
+    registerInPageStop(this.page);
   
     this._logger.info('Waiting for recording duration:', config.maxRecordingDuration, 'minutes...');
     waitingPromise.promise.then(async () => {

@@ -3,7 +3,7 @@ import { BotStatus, WaitPromise } from '../types';
 import config from '../config';
 import { RecordingUploadFailedError, UnsupportedMeetingError, WaitingAtLobbyRetryError } from '../error';
 import { patchBotStatus } from '../services/botService';
-import { handleUnsupportedMeetingError, handleWaitingAtLobbyError, MeetBotBase } from './MeetBotBase';
+import { handleUnsupportedMeetingError, handleWaitingAtLobbyError, MeetBotBase, registerInPageStop } from './MeetBotBase';
 import { v4 } from 'uuid';
 import { IUploader } from '../middleware/disk-uploader';
 import { Logger } from 'winston';
@@ -820,6 +820,9 @@ export class GoogleMeetBot extends MeetBotBase {
             }
           };
 
+          // The /stop endpoint calls this (via the job store) to end the recording early.
+          (window as any).__meetbotStop = stopTheRecording;
+
           let loneTest: NodeJS.Timeout;
           let detectionFailures = 0;
           let loneTestDetectionActive = true;
@@ -1262,6 +1265,7 @@ export class GoogleMeetBot extends MeetBotBase {
         mimeTypes
       }
     );
+    registerInPageStop(this.page);
   
     this._logger.info('Waiting for recording duration', config.maxRecordingDuration, 'minutes...');
     const processingTime = 0.2 * 60 * 1000;
