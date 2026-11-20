@@ -37,7 +37,7 @@ export class ZoomBot extends BotBase {
 
   // TODO use base class for shared functions such as bot status and bot logging
   // TODO Lift the JoinParams to the constructor argument
-  async join({ url, name, email, bearerToken, teamId, timezone, userId, eventId, botId, uploader }: JoinParams): Promise<void> {
+  async join({ url, name, bearerToken, teamId, timezone, userId, eventId, botId, uploader }: JoinParams): Promise<void> {
     const _state: BotStatus[] = ['processing'];
 
     const handleUpload = async () => {
@@ -49,7 +49,7 @@ export class ZoomBot extends BotBase {
     
     try {
       const pushState = (st: BotStatus) => _state.push(st);
-      await this.joinMeeting({ url, name, email, bearerToken, teamId, timezone, userId, eventId, botId, pushState, uploader });
+      await this.joinMeeting({ url, name, bearerToken, teamId, timezone, userId, eventId, botId, pushState, uploader });
       await patchBotStatus({ botId, eventId, provider: 'zoom', status: _state, token: bearerToken }, this._logger);
 
       // Finish the upload from the temp video
@@ -89,7 +89,7 @@ export class ZoomBot extends BotBase {
   }
 
   private async joinMeeting({ pushState, ...params }: JoinParams & { pushState(state: BotStatus): void }): Promise<void> {
-    const { url, name, email } = params;
+    const { url, name } = params;
     this._logger.info('Launching browser for Zoom...', { userId: params.userId });
 
     this.page = await createBrowserContext(url, this._correlationId, 'zoom');
@@ -295,17 +295,6 @@ export class ZoomBot extends BotBase {
 
     this._logger.info('Filling the input field with the name...');
     await iframe.fill('input[type="text"]', name ? name : 'ScreenApp Notetaker');
-
-    // Some meetings (and webinars) also ask for an email; Join stays disabled
-    // until it is filled, so the bot would sit on this form until it times out.
-    const emailInput = iframe.locator('input[type="email"], input#input-for-email, input[aria-label*="email" i], input[placeholder*="email" i]').first();
-    if (await emailInput.isVisible({ timeout: 2000 }).catch(() => false)) {
-      if (!email) {
-        throw new Error('This Zoom meeting asks for an email: send "email" with the join request');
-      }
-      this._logger.info('Filling the email field...');
-      await emailInput.fill(email);
-    }
 
     this._logger.info('Clicking the "Join" button...');
     const joinButton = iframe.locator('button', { hasText: 'Join' }).first();
