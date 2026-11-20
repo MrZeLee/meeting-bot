@@ -16,12 +16,13 @@ const joinZoom = async (req: Request, res: Response) => {
     bearerToken,
     url,
     name,
+    email,
     teamId,
     timezone,
     userId,
     eventId,
     botId
-  }: MeetingJoinParams = req.body;
+  }: MeetingJoinParams & { email?: string } = req.body;
 
   // Validate required fields
   if (!bearerToken || !url || !name || !teamId || !timezone || !userId) {
@@ -65,7 +66,7 @@ const joinZoom = async (req: Request, res: Response) => {
 
       // Create and join the meeting
       const bot = new ZoomBot(logger, correlationId);
-      await bot.join({ url, name, bearerToken, teamId, timezone, userId, eventId, botId, uploader });
+      await bot.join({ url, name, email, bearerToken, teamId, timezone, userId, eventId, botId, uploader });
     }, logger, 0, (error) => notifyMeetingJoinFailure({
       bearerToken,
       url,

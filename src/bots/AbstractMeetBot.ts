@@ -15,6 +15,8 @@ export interface BotLaunchParams {
 export interface JoinParams {
   url: string;
   name: string;
+  // Zoom only: some meetings ask for an email on the join form.
+  email?: string;
   bearerToken: string;
   teamId: string;
   timezone: string;
