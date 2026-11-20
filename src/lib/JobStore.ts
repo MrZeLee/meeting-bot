@@ -1,6 +1,7 @@
 import { Logger } from 'winston';
 import { KnownError } from '../error';
 import { getErrorType } from '../util/logger';
+import { clearActiveJob } from './recovery';
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((r) => setTimeout(r, ms));
@@ -53,6 +54,8 @@ export class JobStore {
     }).finally(() => {
       this.isRunning = false;
       this.stopHandler = null;
+      // Finished, failed or stopped: nothing to rejoin after a restart.
+      clearActiveJob();
     });
 
     logger.info('LogBasedMetric Bot job has been queued and started recording meeting.');

@@ -20,7 +20,7 @@ import { writeWebmDurationMetadata } from '../lib/webmDuration';
 
 console.log(' ----- PWD OR CWD ----- ', process.cwd());
 
-const tempFolder = path.join(process.cwd(), 'dist', '_tempvideo');
+export const tempFolder = path.join(process.cwd(), 'dist', '_tempvideo');
 const execFileAsync = promisify(execFile);
 
 function isNoSuchUploadError(err: any, userId: string, logger: Logger): boolean {
@@ -789,8 +789,11 @@ class DiskUploader implements IUploader {
         throw new Error(`Unsupported UPLOADER_TYPE configuration: ${config.uploaderType}`);
       }
 
-      // Delete temp file after the upload is finished
-      await this.deleteTempFileAsync();
+      // Delete the temp file only once it is safely uploaded; a failed upload
+      // keeps it for recoverAfterRestart (src/lib/recovery.ts) to retry.
+      if (uploadResult) {
+        await this.deleteTempFileAsync();
+      }
 
       // Send optional notifications on success
       if (uploadResult) {

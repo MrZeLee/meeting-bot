@@ -7,6 +7,7 @@ import messageBroker from './connect/messageBroker';
 import config from './config';
 import { isPodMarkedForDeletion } from './util/k8sLifecycle';
 import { loggerFactory } from './util/logger';
+import { recoverAfterRestart } from './lib/recovery';
 
 const port = 3000;
 
@@ -15,6 +16,7 @@ const server = http.createServer(app);
 
 server.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
+  recoverAfterRestart(port, loggerFactory('recovery', 'system'));
 });
 
 // Detect the "SIGTERM lost during ContainerCreating" race: if K8s marked us for deletion

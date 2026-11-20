@@ -7,6 +7,7 @@ import microsoftRouter from './microsoft';
 import zoomRouter from './zoom';
 import { globalJobStore } from '../lib/globalJobStore';
 import { RedisConsumerService } from '../connect/RedisConsumerService';
+import { clearActiveJob, saveActiveJob } from '../lib/recovery';
 
 const app = express();
 
@@ -76,6 +77,19 @@ app.get('/debug', async (req, res, next) => {
 }, async (req, res) => {
   await mainDebug('baf14', 'https://www.github.com');
   res.status(200).send({});
+});
+
+// Remember the meeting being joined, so recoverAfterRestart can rejoin it if the
+// container dies mid-recording. Saved before the router runs (the job could end
+// before the response does), and only when idle: a busy bot answers 409 and the
+// running job's record must survive that. JobStore clears it when the job ends.
+app.post(['/google/join', '/microsoft/join', '/zoom/join'], (req, res, next) => {
+  if (globalJobStore.isBusy()) return next();
+  saveActiveJob({ path: req.path, body: req.body, resumes: Number(req.get('x-resume-count')) || 0 });
+  res.on('finish', () => {
+    if (res.statusCode !== 202) clearActiveJob();
+  });
+  next();
 });
 
 app.use('/google', googleRouter);
